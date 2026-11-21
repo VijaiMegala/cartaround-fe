@@ -395,7 +395,7 @@ function productCard(item) {
   const { label, tone, scope } = availabilityInfo(item.availability);
   return `<article class="product-card">
     <div class="product-image"><span class="product-placeholder" aria-hidden="true">${escapeHTML(initials(item.title))}</span>${image ? `<img src="${escapeHTML(image)}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : ""}</div>
-    <div class="product-info"><div class="availability ${tone}"><span class="availability-dot"></span>${escapeHTML(label)}</div><h3>${escapeHTML(item.title)}</h3><p class="stock-scope">${escapeHTML(scope)}</p><div class="product-bottom"><strong>${escapeHTML(price)}</strong>${source ? `<a href="${escapeHTML(source)}" target="_blank" rel="noopener noreferrer">Retailer site<span class="sr-only"> (opens in a new tab)</span></a>` : ""}</div></div>
+    <div class="product-info">${label ? `<div class="availability ${tone}"><span class="availability-dot"></span>${escapeHTML(label)}</div>` : ""}<h3>${escapeHTML(item.title)}</h3><p class="stock-scope">${escapeHTML(scope)}</p><div class="product-bottom"><strong>${escapeHTML(price)}</strong>${source ? `<a href="${escapeHTML(source)}" target="_blank" rel="noopener noreferrer">Retailer site<span class="sr-only"> (opens in a new tab)</span></a>` : ""}</div></div>
   </article>`;
 }
 
@@ -415,7 +415,7 @@ function availabilityInfo(availability = {}) {
     return { label: "Pickup available", tone: "positive", scope };
   if (availability.status === "reported_out_of_stock")
     return { label: "Reported out of stock", tone: "negative", scope };
-  return { label: "Stock not confirmed", tone: "neutral", scope };
+  return { label: "", tone: "neutral", scope };
 }
 
 document.addEventListener("click", (event) => {
