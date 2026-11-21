@@ -1,10 +1,13 @@
 import { createHash } from "node:crypto";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const root = dirname(fileURLToPath(import.meta.url));
-const cachePath = join(root, ".cache", "store-locations.json");
+const cachePath = process.env.VERCEL
+  ? join(tmpdir(), "cartaround-store-locations.json")
+  : join(root, ".cache", "store-locations.json");
 const cacheMaxAge = 29 * 24 * 60 * 60 * 1000;
 let inFlight;
 
@@ -34,8 +37,9 @@ const fingerprint = (store) =>
     .digest("hex");
 
 async function readCache() {
-  try {
-    const data = JSON.parse(await readFile(cachePath, "utf8"));
+  for (const path of [cachePath, join(root, "store-locations-seed.json")]) {
+    try {
+      const data = JSON.parse(await readFile(path, "utf8"));
     return Object.fromEntries(
       Object.entries(data.locations || {}).filter(
         ([, entry]) =>
@@ -44,8 +48,9 @@ async function readCache() {
             cacheMaxAge,
       ),
     );
-  } catch {
-    /* First run or expired cache. */
+    } catch {
+      /* Try the next cache source. */
+    }
   }
   return {};
 }

@@ -22,3 +22,7 @@ The home screen loads `GET /api/stores`. Use **List / Map** to switch views. The
 The frontend server reads `GOOGLE_MAPS_API_KEY` from its environment or the adjacent backend `.env`. It resolves branch positions with Google Places and keeps coordinates in `.cache/store-locations.json` for at most 29 days. That file is ignored by Git. Stable Place IDs are saved in `store-place-ids.json` so expired coordinates can be refreshed without repeating broad text searches. Maps JavaScript loads the key in the browser, so restrict the key to your site origin and the required Google Maps APIs before hosting this frontend publicly. Map usage may incur Google Maps Platform charges.
 
 Store pages load `GET /api/stores/:id` and `GET /api/stores/:id/products`, with product search and pagination. Product availability labels reflect the backend's reported scope and status; unknown stock is never presented as available.
+
+## Deploy on Vercel
+
+Set the project root to `cart-around-frontend` if deploying from the parent repository. `vercel.json` builds the browser files into `public/` and routes API calls to Node functions. In Vercel project settings, set `BACKEND_URL` to the backend origin and `GOOGLE_MAPS_API_KEY` to the configured Maps key for each deployment environment. The local `.env` file is ignored by Git and is unavailable to Vercel. Deploy the updated commit; browser code must be served as static files, not selected as a Node function entry point.
