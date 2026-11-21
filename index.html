@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#101c19" />
+    <meta
+      name="description"
+      content="Discover local stores and explore their products across Bengaluru."
+    />
+    <title>CartAround — Find it around you</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/app.js" type="module"></script>
+  </head>
+  <body>
+    <div class="site-shell">
+      <header class="site-header">
+        <a class="brand" href="/" data-home aria-label="CartAround home">
+          <span class="brand-mark" aria-hidden="true"
+            ><span></span><span></span><span></span><span></span
+          ></span>
+          <span
+            >cart<span class="brand-accent">around</span
+            ><span class="brand-dot">.</span></span
+          >
+        </a>
+        <div class="header-location" aria-label="Selected city: Bengaluru">
+          <span class="location-pin" aria-hidden="true"></span>
+          <span>Bengaluru, Karnataka</span>
+          <span class="selected-label">SELECTED CITY</span>
+        </div>
+      </header>
+      <main id="app" tabindex="-1"></main>
+      <footer class="site-footer">
+        <span class="footer-brand">cartaround<span>.</span></span>
+        <span>Find what you need, around the corner.</span>
+        <span>Made for Bengaluru</span>
+      </footer>
+    </div>
+  </body>
+</html>
