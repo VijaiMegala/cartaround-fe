@@ -96,6 +96,12 @@ main {
   background: #9edb54;
 }
 .header-location {
+.saved-nav { font-size: 13px; font-weight: 700; color: #234c33; margin-left: auto; margin-right: 24px; white-space: nowrap; }
+.saved-nav:hover, .saved-store:hover { text-decoration: underline; }
+.saved-store { font-size: 12px; font-weight: 700; color: #4b8a47; margin-bottom: 7px; }
+.save-button { margin-top: 14px; padding: 10px 12px; border: 1px solid #a6c99b; border-radius: 8px; background: #edf7e8; color: #285936; font-weight: 700; }
+.save-button:disabled { opacity: .55; cursor: wait; }
+.header-location {
   display: flex;
   align-items: center;
   gap: 9px;

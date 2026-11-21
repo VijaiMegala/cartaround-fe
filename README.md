@@ -23,6 +23,8 @@ The frontend server reads `GOOGLE_MAPS_API_KEY` from its environment or the adja
 
 Store pages load `GET /api/stores/:id` and `GET /api/stores/:id/products`, with product search and pagination. Product availability labels reflect the backend's reported scope and status; unknown stock is never presented as available.
 
+Select **Add to list** on a product to save its details. **Saved list** in the header opens `/saved`, where products can be reviewed or removed. The list is tied to a random key in this browser's local storage; clearing site data loses access to it, and it does not sync across devices. Saved prices and availability reflect when each product was saved.
+
 ## Deploy on Vercel
 
 Set the project root to `cart-around-frontend` if deploying from the parent repository. `vercel.json` builds the browser files into `public/` and routes API calls to Node functions. In Vercel project settings, set `BACKEND_URL` to the backend origin and `GOOGLE_MAPS_API_KEY` to the configured Maps key for each deployment environment. The local `.env` file is ignored by Git and is unavailable to Vercel. Deploy the updated commit; browser code must be served as static files, not selected as a Node function entry point.

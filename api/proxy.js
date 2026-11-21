@@ -14,9 +14,21 @@ export default async function handler(request, response) {
   }
   url.searchParams.delete("path");
   try {
+    const chunks = [];
+    let size = 0;
+    for await (const chunk of request) {
+      size += chunk.length;
+      if (size > 32768) {
+        response.writeHead(413);
+        response.end("Request too large");
+        return;
+      }
+      chunks.push(chunk);
+    }
     const upstream = await fetch(new URL(`/api/${path}${url.search}`, backend), {
       method: request.method,
-      headers: { accept: request.headers.accept || "application/json" },
+      headers: { accept: "application/json", ...(request.headers["x-list-key"] ? { "x-list-key": request.headers["x-list-key"] } : {}), ...(chunks.length ? { "content-type": "application/json" } : {}) },
+      ...(chunks.length ? { body: Buffer.concat(chunks) } : {}),
       signal: AbortSignal.timeout(20000),
     });
     response.writeHead(upstream.status, {

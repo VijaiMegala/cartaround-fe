@@ -12,6 +12,9 @@
   "rewrites": [
     { "source": "/api/stores", "destination": "/api/proxy?path=stores" },
     { "source": "/api/stores/:path*", "destination": "/api/proxy?path=stores/:path*" },
+    { "source": "/api/saved-products", "destination": "/api/proxy?path=saved-products" },
+    { "source": "/api/saved-products/:path*", "destination": "/api/proxy?path=saved-products/:path*" },
+    { "source": "/saved", "destination": "/index.html" },
     { "source": "/stores/:path*", "destination": "/index.html" }
   ]
 }

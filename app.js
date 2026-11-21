@@ -18,7 +18,52 @@ const state = {
   coordinates: null,
   routeVersion: 0,
   productVersion: 0,
+  savedProducts: null,
+  savedError: null,
+  saving: false,
+  savedVersion: 0,
 };
+
+function listKey() {
+  let key = localStorage.getItem("cartaround-list-key");
+  if (!key) {
+    key = Array.from(crypto.getRandomValues(new Uint8Array(32)), (byte) => byte.toString(16).padStart(2, "0")).join("");
+    localStorage.setItem("cartaround-list-key", key);
+  }
+  return key;
+}
+
+async function savedRequest(path = "", method = "GET", body) {
+  const response = await fetch(`/api/saved-products${path}`, {
+    method,
+    headers: { accept: "application/json", "x-list-key": listKey(), ...(body ? { "content-type": "application/json" } : {}) },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.message || `Request failed (${response.status})`);
+  return data;
+}
+
+function updateSavedCount() {
+  const count = document.querySelector("#saved-count");
+  if (count) count.textContent = state.savedProducts?.length ? `(${state.savedProducts.length})` : "";
+}
+
+async function loadSavedProducts() {
+  const version = ++state.savedVersion;
+  try {
+    const products = await savedRequest();
+    if (version !== state.savedVersion) return;
+    state.savedProducts = products;
+    state.savedError = null;
+  } catch (error) {
+    if (version !== state.savedVersion) return;
+    state.savedError = error.message;
+  }
+  updateSavedCount();
+  if (location.pathname === "/saved") renderSavedRoute();
+  else renderProductResults();
+}
 
 function destroyMap() {
   destroyStoreMap();
@@ -134,7 +179,8 @@ function renderRoute() {
   destroyMap();
   state.routeVersion++;
   const id = currentStoreId();
-  if (id) renderStoreRoute(id, state.routeVersion);
+  if (location.pathname === "/saved") renderSavedRoute();
+  else if (id) renderStoreRoute(id, state.routeVersion);
   else renderDirectoryRoute();
 }
 
@@ -157,7 +203,7 @@ async function loadStores() {
   } catch (error) {
     state.storesError = error.message;
   }
-  if (!currentStoreId()) {
+  if (location.pathname === "/") {
     destroyMap();
     app.innerHTML = directoryTemplate();
     renderDirectoryResults();
@@ -307,6 +353,12 @@ function renderStorePage() {
   renderProductResults();
 }
 
+function renderSavedRoute() {
+  document.title = "Saved products — CartAround";
+  const items = state.savedProducts;
+  app.innerHTML = `<section class="store-page content-width"><nav class="breadcrumb"><a href="/" data-home>All Bengaluru stores</a><span aria-hidden="true">/</span><span>Saved list</span></nav><div class="products-intro"><div><div class="section-kicker">YOUR LIST</div><h1>Saved products<span class="heading-dot">.</span></h1><p>Keep product details handy. Prices and availability are from when you saved each item.</p></div></div><div aria-live="polite">${state.savedError ? `<div class="feedback"><h3>Couldn’t load your list</h3><p>${escapeHTML(state.savedError)}</p><button class="solid-button" data-retry-saved>Try again</button></div>` : !items ? '<div class="results-meta">LOADING YOUR LIST...</div>' : items.length ? `<div class="product-grid">${items.map((item) => productCard(item, true)).join("")}</div>` : '<div class="feedback"><h3>Your list is empty</h3><p>Open a store and save products you want to remember.</p><a class="solid-button" href="/" data-home>Explore stores</a></div>'}</div></section>`;
+}
+
 async function loadProducts() {
   if (!state.store) return;
   const id = state.store.id;
@@ -375,13 +427,13 @@ function renderProductResults() {
   }
   target.innerHTML = `
     <div class="results-meta"><span>${escapeHTML(result.items.length)} PRODUCTS ON THIS PAGE</span><span>PAGE ${escapeHTML(result.pagination?.current_page || state.productPage)}</span></div>
-    <div class="product-grid">${result.items.map(productCard).join("")}</div>
+    <div class="product-grid">${result.items.map((item, index) => productCard(item, false, index)).join("")}</div>
     <div class="pagination"><button type="button" class="page-button" data-page="${state.productPage - 1}" ${state.productPage <= 1 ? "disabled" : ""}>Previous</button><span>Page ${state.productPage}</span><button type="button" class="page-button" data-page="${state.productPage + 1}" ${result.pagination?.has_next ? "" : "disabled"}>Next</button></div>`;
   for (const image of target.querySelectorAll(".product-image img"))
     image.addEventListener("error", () => image.remove(), { once: true });
 }
 
-function productCard(item) {
+function productCard(item, saved = false, index = 0) {
   const image = safeURL(item.image_url);
   const source = safeURL(item.source_url);
   const price =
@@ -395,7 +447,7 @@ function productCard(item) {
   const { label, tone, scope } = availabilityInfo(item.availability);
   return `<article class="product-card">
     <div class="product-image"><span class="product-placeholder" aria-hidden="true">${escapeHTML(initials(item.title))}</span>${image ? `<img src="${escapeHTML(image)}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : ""}</div>
-    <div class="product-info">${label ? `<div class="availability ${tone}"><span class="availability-dot"></span>${escapeHTML(label)}</div>` : ""}<h3>${escapeHTML(item.title)}</h3><p class="stock-scope">${escapeHTML(scope)}</p><div class="product-bottom"><strong>${escapeHTML(price)}</strong>${source ? `<a href="${escapeHTML(source)}" target="_blank" rel="noopener noreferrer">Retailer site<span class="sr-only"> (opens in a new tab)</span></a>` : ""}</div></div>
+    <div class="product-info">${label ? `<div class="availability ${tone}"><span class="availability-dot"></span>${escapeHTML(label)}</div>` : ""}<h3>${escapeHTML(item.title)}</h3>${saved ? `<a class="saved-store" href="/stores/${encodeURIComponent(item.store_id)}" data-store-id="${escapeHTML(item.store_id)}">${escapeHTML(item.store_name)}</a>` : ""}<p class="stock-scope">${escapeHTML(scope)}</p><div class="product-bottom"><strong>${escapeHTML(price)}</strong>${source ? `<a href="${escapeHTML(source)}" target="_blank" rel="noopener noreferrer">Retailer site<span class="sr-only"> (opens in a new tab)</span></a>` : ""}</div><button class="save-button" type="button" ${saved ? `data-remove-saved="${escapeHTML(item.id)}"` : `data-save-product="${index}"`} ${state.saving ? "disabled" : ""}>${saved ? "Remove from list" : state.savedProducts?.some((entry) => entry.store_id === state.store?.id && entry.product_id === item.product_id && entry.variant_id === item.variant_id) ? "Saved ✓" : "Add to list"}</button></div>
   </article>`;
 }
 
@@ -419,6 +471,25 @@ function availabilityInfo(availability = {}) {
 }
 
 document.addEventListener("click", (event) => {
+  const savedLink = event.target.closest("[data-saved-link]");
+  if (savedLink) { event.preventDefault(); navigate("/saved"); return; }
+  if (event.target.closest("[data-retry-saved]")) { loadSavedProducts(); return; }
+  const saveButton = event.target.closest("[data-save-product]");
+  if (saveButton && !state.saving) {
+    const item = state.products?.items?.[Number(saveButton.dataset.saveProduct)];
+    if (!item || !state.store) return;
+    state.saving = true;
+    saveButton.disabled = true;
+    savedRequest("", "POST", { ...item, store_id: state.store.id }).then(() => loadSavedProducts()).catch((error) => alert(`Couldn’t save product: ${error.message}`)).finally(() => { state.saving = false; renderProductResults(); });
+    return;
+  }
+  const removeButton = event.target.closest("[data-remove-saved]");
+  if (removeButton && !state.saving) {
+    state.saving = true;
+    removeButton.disabled = true;
+    savedRequest(`/${encodeURIComponent(removeButton.dataset.removeSaved)}`, "DELETE").then(() => loadSavedProducts()).catch((error) => alert(`Couldn’t remove product: ${error.message}`)).finally(() => { state.saving = false; if (location.pathname === "/saved") renderSavedRoute(); });
+    return;
+  }
   const view = event.target.closest("[data-view]");
   if (view) {
     state.view = view.dataset.view;
@@ -534,3 +605,4 @@ document.addEventListener("submit", (event) => {
 
 window.addEventListener("popstate", renderRoute);
 renderRoute();
+loadSavedProducts();
