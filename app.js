@@ -22,6 +22,10 @@ const state = {
   savedError: null,
   saving: false,
   savedVersion: 0,
+  nearbyPosition: null,
+  nearbyLocations: null,
+  nearbyStatus: "idle",
+  nearbyMessage: "",
 };
 
 function listKey() {
@@ -191,6 +195,61 @@ function renderDirectoryRoute() {
   app.innerHTML = directoryTemplate();
   renderDirectoryResults();
   if (!state.stores && !state.storesError) loadStores();
+  if (state.nearbyStatus === "idle") useNearbyLocation();
+}
+
+function distanceKm(from, to) {
+  const radians = (degrees) => degrees * Math.PI / 180;
+  const latitude = radians(Number(to.latitude) - from.latitude);
+  const longitude = radians(Number(to.longitude) - from.longitude);
+  const arc = Math.sin(latitude / 2) ** 2 +
+    Math.cos(radians(from.latitude)) * Math.cos(radians(Number(to.latitude))) *
+    Math.sin(longitude / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(arc), Math.sqrt(1 - arc));
+}
+
+function useNearbyLocation() {
+  if (!navigator.geolocation) {
+    state.nearbyStatus = "unavailable";
+    state.nearbyMessage = "Location is unavailable in this browser. Showing all stores.";
+    renderNearbyStatus();
+    return;
+  }
+  state.nearbyStatus = "locating";
+  state.nearbyLocations = null;
+  state.nearbyMessage = "Finding stores within 5 km of you…";
+  renderDirectoryResults();
+  navigator.geolocation.getCurrentPosition(async ({ coords }) => {
+    const position = { latitude: coords.latitude, longitude: coords.longitude };
+    state.nearbyPosition = position;
+    state.nearbyStatus = "loading";
+    state.nearbyMessage = "Checking nearby branch locations…";
+    renderNearbyStatus();
+    try {
+      const data = await getJSON("/api/map/stores");
+      state.nearbyLocations = data.locations || {};
+      state.nearbyStatus = "active";
+      state.nearbyMessage = "Showing verified stores within 5 km of your location.";
+    } catch {
+      state.nearbyStatus = "unavailable";
+      state.nearbyMessage = "Store locations could not load. Showing all stores.";
+    }
+    renderDirectoryResults();
+  }, () => {
+    state.nearbyStatus = "unavailable";
+    state.nearbyMessage = "Location access was unavailable. Showing all stores.";
+    renderDirectoryResults();
+  }, { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 });
+}
+
+function renderNearbyStatus() {
+  const target = document.querySelector("#nearby-status");
+  if (!target) return;
+  if (state.view === "map" && state.nearbyPosition && state.nearbyLocations) {
+    target.textContent = "Map shows only verified stores within 5 km of your location.";
+    return;
+  }
+  target.innerHTML = `<span>${escapeHTML(state.nearbyMessage || "Use your location to find stores within 5 km.")}</span>${state.nearbyStatus === "unavailable" ? '<button type="button" data-retry-nearby>Try location again</button>' : state.nearbyStatus === "active" ? '<button type="button" data-show-all-stores>Show all stores</button>' : state.nearbyStatus === "all" ? '<button type="button" data-retry-nearby>Show nearby stores</button>' : ""}`;
 }
 
 async function loadStores() {
@@ -238,6 +297,7 @@ function directoryTemplate() {
     <section class="directory content-width" id="stores" aria-labelledby="stores-title">
       <div class="section-intro"><div><div class="section-kicker">EXPLORE LOCALLY</div><h2 id="stores-title">Stores around Bengaluru<span class="heading-dot">.</span></h2><p>Pick a store to see its products and reported availability.</p></div><span class="directory-count" id="directory-count"></span></div>
       <div class="directory-controls"><label class="search-box"><span class="search-icon" aria-hidden="true"></span><span class="sr-only">Search stores</span><input id="store-search" type="search" placeholder="Search stores, brands, or neighbourhoods" value="${escapeHTML(state.storeQuery)}" autocomplete="off" /></label><div class="view-toggle" role="group" aria-label="Store view"><button type="button" data-view="list" class="${state.view === "list" ? "active" : ""}" aria-pressed="${state.view === "list"}">List</button><button type="button" data-view="map" class="${state.view === "map" ? "active" : ""}" aria-pressed="${state.view === "map"}">Map</button></div></div>
+      <div class="nearby-status" id="nearby-status" role="status"></div>
       <div class="area-list" id="area-list" aria-label="Filter by neighbourhood"></div>
       <div id="store-results" aria-live="polite"></div>
     </section>`;
@@ -247,6 +307,7 @@ function renderDirectoryResults() {
   const list = document.querySelector("#store-results");
   const areas = document.querySelector("#area-list");
   if (!list || !areas) return;
+  renderNearbyStatus();
   destroyMap();
 
   if (state.storesError) {
@@ -271,21 +332,35 @@ function renderDirectoryResults() {
     .join("");
 
   const stores = filteredStores();
+  const mapStores = state.nearbyPosition && state.nearbyLocations
+    ? stores.filter((store) =>
+        store.is_physical !== false &&
+        state.nearbyLocations[store.id] &&
+        distanceKm(state.nearbyPosition, state.nearbyLocations[store.id]) <= 5,
+      )
+    : [];
+  const visibleStores = state.view === "map" ? mapStores : stores;
   document.querySelector("#directory-count").textContent =
-    `${stores.length} ${stores.length === 1 ? "STORE" : "STORES"}`;
-  list.innerHTML = stores.length
-    ? state.view === "map"
-      ? `<div class="map-layout"><div class="map-panel"><div id="store-map" role="region" aria-label="Map showing individual store locations in Bengaluru"><div class="map-loading">Locating stores on the map...</div></div><div class="map-note" id="map-note">Store pins show verified branch locations. Select a logo to see products.</div></div><aside id="map-sidebar" class="map-sidebar" aria-label="Stores on the map"></aside></div>`
-      : `<div class="store-grid">${stores.map(storeCard).join("")}</div>`
-    : `<div class="feedback"><div class="feedback-icon">⌕</div><h3>No stores found</h3><p>Try another store name or neighbourhood.</p><button type="button" class="solid-button" data-clear-filters>Clear filters</button></div>`;
-  if (stores.length && state.view === "map")
-    renderStoreMap(stores, { logoURL: storeLogo, initials, navigate });
+    `${visibleStores.length} ${visibleStores.length === 1 ? "STORE" : "STORES"}`;
+  list.innerHTML = state.view === "map" && state.nearbyPosition && state.nearbyLocations
+    ? `<div class="map-layout"><div class="map-panel"><div id="store-map" role="region" aria-label="Map showing stores and your 5 km area in Bengaluru"><div class="map-loading">Locating stores on the map...</div></div><div class="map-note" id="map-note">Store pins show verified branch locations. Select a logo to see products.</div></div><aside id="map-sidebar" class="map-sidebar" aria-label="Stores on the map"></aside></div>`
+    : state.view === "map"
+      ? `<div class="feedback"><div class="feedback-icon">⌖</div><h3>Location needed for the map</h3><p>${state.nearbyStatus === "locating" || state.nearbyStatus === "loading" ? "Finding your location and nearby stores…" : "Allow location access to see stores within 5 km of you."}</p>${state.nearbyStatus === "locating" || state.nearbyStatus === "loading" ? "" : '<button type="button" class="solid-button" data-retry-nearby>Use my location</button>'}</div>`
+    : stores.length
+      ? `<div class="store-grid">${stores.map(storeCard).join("")}</div>`
+    : `<div class="feedback"><div class="feedback-icon">⌕</div><h3>No stores found</h3><p>${state.nearbyStatus === "active" ? "No verified stores match within 5 km. Try another search or show all stores." : "Try another store name or neighbourhood."}</p><button type="button" class="solid-button" data-clear-filters>Clear filters</button></div>`;
+  if (state.view === "map" && state.nearbyPosition && state.nearbyLocations)
+    renderStoreMap(mapStores, { logoURL: storeLogo, initials, navigate, currentLocation: state.nearbyPosition, nearbyActive: true });
 }
 
 function filteredStores() {
   const query = state.storeQuery.trim().toLowerCase();
   return (state.stores || []).filter(
     (store) =>
+      (state.nearbyStatus !== "active" ||
+        (store.is_physical !== false &&
+          state.nearbyLocations?.[store.id] &&
+          distanceKm(state.nearbyPosition, state.nearbyLocations[store.id]) <= 5)) &&
       (state.area === "All areas" || store.location === state.area) &&
       (!query ||
         [store.store_name, store.brand, store.location, store.address].some(
@@ -294,7 +369,9 @@ function filteredStores() {
               .toLowerCase()
               .includes(query),
         )),
-  );
+  ).sort((a, b) => state.nearbyStatus === "active"
+    ? distanceKm(state.nearbyPosition, state.nearbyLocations[a.id]) - distanceKm(state.nearbyPosition, state.nearbyLocations[b.id])
+    : 0);
 }
 
 function storeCard(store) {
@@ -308,7 +385,7 @@ function storeCard(store) {
           : "Explore catalogue";
   return `<a class="store-card" href="/stores/${encodeURIComponent(store.id)}" data-store-id="${escapeHTML(store.id)}">
     <div class="card-top">${logoTile(store)}<span class="card-visit" aria-hidden="true">↗</span></div>
-    <div class="card-location"><span class="mini-pin" aria-hidden="true"></span>${escapeHTML(store.location || "Bengaluru")}</div>
+    <div class="card-location"><span class="mini-pin" aria-hidden="true"></span>${escapeHTML(store.location || "Bengaluru")}${state.nearbyStatus === "active" ? ` · ${distanceKm(state.nearbyPosition, state.nearbyLocations[store.id]).toFixed(1)} km away` : ""}</div>
     <h3>${escapeHTML(store.store_name)}</h3>
     <p class="card-address">${escapeHTML(store.address || "Bengaluru, Karnataka")}</p>
     <div class="card-bottom"><span class="catalogue-label">${escapeHTML(label)}</span><span class="view-products">View products</span></div>
@@ -321,7 +398,7 @@ async function renderStoreRoute(id, version) {
   state.productPage = 1;
   state.products = null;
   state.productsError = null;
-  state.coordinates = null;
+  state.coordinates = state.nearbyPosition;
   document.title = `${state.store?.store_name || "Store"} — CartAround`;
   renderStorePage();
   if (!state.store) {
@@ -471,6 +548,13 @@ function availabilityInfo(availability = {}) {
 }
 
 document.addEventListener("click", (event) => {
+  if (event.target.closest("[data-retry-nearby]")) { useNearbyLocation(); return; }
+  if (event.target.closest("[data-show-all-stores]")) {
+    state.nearbyStatus = "all";
+    state.nearbyMessage = "Showing all Bengaluru stores.";
+    renderDirectoryResults();
+    return;
+  }
   const savedLink = event.target.closest("[data-saved-link]");
   if (savedLink) { event.preventDefault(); navigate("/saved"); return; }
   if (event.target.closest("[data-retry-saved]")) { loadSavedProducts(); return; }

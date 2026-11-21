@@ -19,6 +19,9 @@ PORT=5174 npm run dev
 
 The home screen loads `GET /api/stores`. Use **List / Map** to switch views. The Google map shows an individual logo pin at each resolved physical branch; selecting a pin or store opens its product screen. Brand favicons are used where available, with initials as a fallback. The four delivery-only listings have no physical pin.
 
+The home screen requests browser location access and, when granted, shows verified physical branches within a 5 km straight-line radius, nearest first. **Show all stores** removes the radius filter. If permission or branch locations are unavailable, the full directory stays visible and the user can retry. Geolocation requires HTTPS or localhost in most browsers.
+The map always shows only verified branches inside the 5 km circle. It waits for location access before showing pins; **Show all stores** applies to the list view.
+
 The frontend server reads `GOOGLE_MAPS_API_KEY` from its environment or the adjacent backend `.env`. It resolves branch positions with Google Places and keeps coordinates in `.cache/store-locations.json` for at most 29 days. That file is ignored by Git. Stable Place IDs are saved in `store-place-ids.json` so expired coordinates can be refreshed without repeating broad text searches. Maps JavaScript loads the key in the browser, so restrict the key to your site origin and the required Google Maps APIs before hosting this frontend publicly. Map usage may incur Google Maps Platform charges.
 
 Store pages load `GET /api/stores/:id` and `GET /api/stores/:id/products`, with product search and pagination. Product availability labels reflect the backend's reported scope and status; unknown stock is never presented as available.

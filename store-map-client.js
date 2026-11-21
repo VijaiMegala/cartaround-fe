@@ -1,9 +1,15 @@
 let activeMap = null;
 let activePins = new Map();
 let googleLoader = null;
+let activeLocationMarker = null;
+let activeRadiusCircle = null;
 
 export function destroyStoreMap() {
   for (const pin of activePins.values()) pin.setMap(null);
+  activeLocationMarker?.setMap(null);
+  activeRadiusCircle?.setMap(null);
+  activeLocationMarker = null;
+  activeRadiusCircle = null;
   activePins = new Map();
   activeMap = null;
 }
@@ -82,6 +88,45 @@ function makePin(store, position, options, onSelect) {
   return pin;
 }
 
+function makeCurrentLocationPin(maps, position) {
+  class CurrentLocationPin extends maps.OverlayView {
+    onAdd() {
+      const marker = document.createElement("div");
+      marker.className = "current-location-pin";
+      marker.setAttribute("role", "img");
+      marker.setAttribute("aria-label", "Your current location");
+      marker.innerHTML = '<span class="current-location-label">YOU ARE HERE</span><span class="current-location-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.2"/><path d="M5.5 19c.8-3.1 3-4.7 6.5-4.7s5.7 1.6 6.5 4.7"/></svg></span>';
+      this.element = marker;
+      this.getPanes().overlayMouseTarget.appendChild(marker);
+    }
+    draw() {
+      const point = this.getProjection().fromLatLngToDivPixel(
+        new maps.LatLng(position.latitude, position.longitude),
+      );
+      if (point && this.element) {
+        this.element.style.left = `${point.x}px`;
+        this.element.style.top = `${point.y}px`;
+      }
+    }
+    onRemove() {
+      this.element?.remove();
+    }
+  }
+  const pin = new CurrentLocationPin();
+  pin.setMap(activeMap);
+  return pin;
+}
+
+function withinFiveKm(from, to) {
+  const radians = (degrees) => degrees * Math.PI / 180;
+  const latitude = radians(to.latitude - from.latitude);
+  const longitude = radians(to.longitude - from.longitude);
+  const arc = Math.sin(latitude / 2) ** 2 +
+    Math.cos(radians(from.latitude)) * Math.cos(radians(to.latitude)) *
+    Math.sin(longitude / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(arc), Math.sqrt(1 - arc)) <= 5;
+}
+
 export async function renderStoreMap(stores, options) {
   const element = document.querySelector("#store-map");
   const sidebar = document.querySelector("#map-sidebar");
@@ -107,8 +152,27 @@ export async function renderStoreMap(stores, options) {
       fullscreenControl: false,
       gestureHandling: "cooperative",
     });
-    const mapped = stores.filter(
-      (store) => store.is_physical !== false && data.locations?.[store.id],
+    if (options.currentLocation) {
+      const center = {
+        lat: options.currentLocation.latitude,
+        lng: options.currentLocation.longitude,
+      };
+      activeRadiusCircle = new maps.Circle({
+        map: activeMap,
+        center,
+        radius: 5000,
+        strokeColor: "#31804b",
+        strokeOpacity: 0.9,
+        strokeWeight: 2,
+        fillColor: "#86c654",
+        fillOpacity: 0.17,
+        clickable: false,
+      });
+    }
+    const mapped = stores.filter((store) =>
+      store.is_physical !== false &&
+      data.locations?.[store.id] &&
+      withinFiveKm(options.currentLocation, data.locations[store.id]),
     );
     const bounds = new maps.LatLngBounds();
     for (const store of mapped) {
@@ -116,18 +180,21 @@ export async function renderStoreMap(stores, options) {
       bounds.extend({ lat: position.latitude, lng: position.longitude });
       activePins.set(store.id, makePin(store, position, options, selectStore));
     }
-    if (mapped.length) {
+    if (options.currentLocation)
+      activeLocationMarker = makeCurrentLocationPin(maps, options.currentLocation);
+    if (options.nearbyActive && activeRadiusCircle) {
+      activeMap.fitBounds(activeRadiusCircle.getBounds(), 40);
+    } else if (mapped.length) {
+      if (options.currentLocation)
+        bounds.extend({ lat: options.currentLocation.latitude, lng: options.currentLocation.longitude });
       activeMap.fitBounds(bounds, 55);
       const maxFitZoom = mapped.length > 30 ? 12 : 15;
       maps.event.addListenerOnce(activeMap, "idle", () => {
         if (activeMap?.getZoom() > maxFitZoom) activeMap.setZoom(maxFitZoom);
       });
     }
-    const missing = stores.filter(
-      (store) => store.is_physical !== false && !data.locations?.[store.id],
-    );
     if (note)
-      note.textContent = `${mapped.length} verified branch pins${missing.length ? ` · ${missing.length} address${missing.length === 1 ? "" : "es"} still need verification` : ""}. Select a logo to see products.`;
+      note.textContent = `Green circle: 5 km around your location · ${mapped.length} verified branch pins. Select a logo to see products.`;
 
     function showList() {
       for (const pin of activePins.values())
@@ -161,11 +228,11 @@ export async function renderStoreMap(stores, options) {
         row.addEventListener("click", () => selectStore(store));
         list.appendChild(row);
       }
-      for (const store of missing) {
-        const row = document.createElement("div");
-        row.className = "map-unmapped-row";
-        row.textContent = `${store.store_name} · location not verified`;
-        list.appendChild(row);
+      if (!mapped.length) {
+        const empty = document.createElement("p");
+        empty.className = "map-unmapped-row";
+        empty.textContent = options.nearbyActive ? "No verified stores within 5 km." : "No stores match these filters.";
+        list.appendChild(empty);
       }
     }
 
