@@ -95,7 +95,6 @@ main {
 .brand-mark span:nth-child(3) {
   background: #9edb54;
 }
-.header-location {
 .saved-nav { font-size: 13px; font-weight: 700; color: #234c33; margin-left: auto; margin-right: 24px; white-space: nowrap; }
 .saved-nav:hover, .saved-store:hover { text-decoration: underline; }
 .saved-store { font-size: 12px; font-weight: 700; color: #4b8a47; margin-bottom: 7px; }
