@@ -7,7 +7,16 @@ import { mapsKey, storeLocations } from "./store-map.mjs";
 const root = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT || 5173);
 const host = process.env.HOST || "127.0.0.1";
-const apiOrigin = process.env.API_ORIGIN || "http://localhost:3000";
+const frontendEnv = await readFile(join(root, ".env"), "utf8").catch(() => "");
+const configuredBackend = frontendEnv
+  .match(/^\s*BACKEND_URL\s*=\s*(.*)\s*$/m)?.[1]
+  ?.trim()
+  .replace(/^['"]|['"]$/g, "");
+const apiOrigin =
+  process.env.BACKEND_URL || configuredBackend || "http://localhost:3000";
+if (!["http:", "https:"].includes(new URL(apiOrigin).protocol)) {
+  throw new Error("BACKEND_URL must be an HTTP or HTTPS URL");
+}
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -69,7 +78,7 @@ createServer(async (request, response) => {
       response.end(
         JSON.stringify({
           message:
-            "Backend unavailable. Start cart-around-backend on port 3000.",
+            "Backend unavailable. Check BACKEND_URL in cart-around-frontend/.env.",
         }),
       );
     }
@@ -91,5 +100,5 @@ createServer(async (request, response) => {
   }
 }).listen(port, host, () => {
   console.log(`CartAround frontend: http://localhost:${port}`);
-  console.log(`Proxying API requests to ${apiOrigin}`);
+  console.log("Proxying API requests using BACKEND_URL");
 });
